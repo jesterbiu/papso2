@@ -10,10 +10,13 @@ void parallel_async_pso_benchmark(
 	, std::size_t iter_per_task
 	, typename papso_t::optimization_problem_t problem
 	, const char* const msg) {
-	auto result = papso_t::parallel_async_pso(etor, fork_count, iter_per_task, problem);
-	auto [v, pos] = result.get(); // Could be wasting?
-	printf_s("\npar async pso @%s: %lf\n", msg, v);
-	printf("\n");
+
+	for (int i = 0; i < 10; ++i) {
+		auto result = papso_t::parallel_async_pso(etor, fork_count, iter_per_task, problem);
+		auto [v, pos] = result.get(); // Could be wasting?
+		printf_s("\npar async pso @%s: %lf\n", msg, v);
+		printf("\n");
+	}
 }
 
 #endif

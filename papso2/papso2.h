@@ -20,7 +20,7 @@ using iter = vec_t::const_iterator;
 using func_t = double(*)(iter, iter);
 using bound_t = std::pair<double, double>;
 
-template <typename buffer_t, size_t neighbor_size = 2u>
+template <typename buffer_t, size_t neighbor_size, size_t swarm_size>
 class basic_papso {
 	template <typename T>
 	class alignas(64) aligned_atomic_t {
@@ -56,7 +56,7 @@ public:
 	using range_t = std::pair<size_t, size_t>;
 	using worker_handle = hungbiu::hb_executor::worker_handle;
 
-	static constexpr size_t swarm_size = 40u;
+	static constexpr size_t swarm_size = swarm_size;
 	static constexpr size_t iteration = 5000u;
 	static constexpr bool track_convergency = false;
 
@@ -368,8 +368,8 @@ public:
 		state.initialize_swarm(state.rngs[0]);
 
 		// Forks
-		assert(0 == (state.swarm_size % fork_count));
-		size_t fork_size = state.swarm_size / fork_count;
+		assert(0 == (swarm_size % fork_count));
+		size_t fork_size = swarm_size / fork_count;
 		for (size_t i = 0; i < fork_count; ++i) {
 			range_t subswarm_range;
 			subswarm_range.first = fork_size * i;
@@ -384,6 +384,6 @@ public:
 		return basic_papso::papso_result_t{ std::move(pso_state_uptr) };
 	}
 };
-using papso = basic_papso<hungbiu::naive_spmc_buffer<vec_t>, 2u>;
+using papso = basic_papso<hungbiu::naive_spmc_buffer<vec_t>, 2u, 40u>;
 
 #endif

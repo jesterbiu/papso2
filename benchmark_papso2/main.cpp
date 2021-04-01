@@ -139,14 +139,14 @@ double time_scaled_func(iter beg, iter end) { // 420ns
 	}
 	return test_functions::functions[3](beg, end);
 }
-template <typename buffer_t, size_t nb_sz, size_t func_sz>
+template <typename buffer_t, size_t nb_sz>
 void benchmark_particle_communication(benchmark::State& state) {
-	using papso_t = basic_papso<buffer_t, nb_sz>;
+	using papso_t = basic_papso<buffer_t, nb_sz, nb_sz>; // global topology
 
 	const auto fork_count = state.range(0);
 	
 	papso::optimization_problem_t problem{
-		time_scaled_func<func_sz>,
+		test_functions::functions[3],
 		test_functions::bounds[3],
 		test_functions::dimensions[3]
 	};
@@ -160,6 +160,8 @@ void benchmark_particle_communication(benchmark::State& state) {
 }
 using naive_buffer = hungbiu::naive_spmc_buffer<vec_t>;
 using my_buffer = hungbiu::spmc_buffer<vec_t>;/*
+
+// Neighbor hood size
 BENCHMARK_TEMPLATE(benchmark_particle_communication, naive_buffer, 2u, 1)
 ->Unit(benchmark::kMillisecond)->Arg(4)->Iterations(10)->Repetitions(10);
 BENCHMARK_TEMPLATE(benchmark_particle_communication, naive_buffer, 12u, 1)
@@ -169,13 +171,37 @@ BENCHMARK_TEMPLATE(benchmark_particle_communication, naive_buffer, 24u, 1)
 BENCHMARK_TEMPLATE(benchmark_particle_communication, naive_buffer, 36u, 1)
 ->Unit(benchmark::kMillisecond)->Arg(4)->Iterations(10)->Repetitions(10);*/
 
-BENCHMARK_TEMPLATE(benchmark_particle_communication, naive_buffer, 40u, 1)
-->Unit(benchmark::kMillisecond)->Iterations(10)->Repetitions(10)
-->Arg(2)->Arg(4)->Arg(6)->Arg(8);
+// Communication cost - Forks
+//BENCHMARK_TEMPLATE(benchmark_particle_communication, naive_buffer, 40u, 1)
+//->Unit(benchmark::kMillisecond)->Iterations(10)->Repetitions(10)
+//->Arg(2)->Arg(4)->Arg(6)->Arg(8);
+//
+//
+//BENCHMARK_TEMPLATE(benchmark_particle_communication, my_buffer, 40u, 1)
+//->Unit(benchmark::kMillisecond)->Iterations(10)->Repetitions(10)
+//->Arg(2)->Arg(4)->Arg(6)->Arg(8);
 
+// Commnucation cost - Swarm size
+BENCHMARK_TEMPLATE(benchmark_particle_communication, naive_buffer, 40u)
+->Unit(benchmark::kMillisecond)->Iterations(10)->Arg(8);
+BENCHMARK_TEMPLATE(benchmark_particle_communication, naive_buffer, 50u)
+->Unit(benchmark::kMillisecond)->Iterations(10)->Arg(8);
+BENCHMARK_TEMPLATE(benchmark_particle_communication, naive_buffer, 60u)
+->Unit(benchmark::kMillisecond)->Iterations(10)->Arg(8);
+BENCHMARK_TEMPLATE(benchmark_particle_communication, naive_buffer, 70u)
+->Unit(benchmark::kMillisecond)->Iterations(10)->Arg(8);
+BENCHMARK_TEMPLATE(benchmark_particle_communication, naive_buffer, 80u)
+->Unit(benchmark::kMillisecond)->Iterations(10)->Arg(8);
 
-BENCHMARK_TEMPLATE(benchmark_particle_communication, my_buffer, 40u, 1)
-->Unit(benchmark::kMillisecond)->Iterations(10)->Repetitions(10)
-->Arg(2)->Arg(4)->Arg(6)->Arg(8);
+BENCHMARK_TEMPLATE(benchmark_particle_communication, my_buffer, 40u)
+->Unit(benchmark::kMillisecond)->Iterations(10)->Arg(8);
+BENCHMARK_TEMPLATE(benchmark_particle_communication, my_buffer, 50u)
+->Unit(benchmark::kMillisecond)->Iterations(10)->Arg(8);
+BENCHMARK_TEMPLATE(benchmark_particle_communication, my_buffer, 60u)
+->Unit(benchmark::kMillisecond)->Iterations(10)->Arg(8);
+BENCHMARK_TEMPLATE(benchmark_particle_communication, my_buffer, 70u)
+->Unit(benchmark::kMillisecond)->Iterations(10)->Arg(8);
+BENCHMARK_TEMPLATE(benchmark_particle_communication, my_buffer, 80u)
+->Unit(benchmark::kMillisecond)->Iterations(10)->Arg(8);
 
 BENCHMARK_MAIN();
