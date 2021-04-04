@@ -15,7 +15,7 @@ double scaled_schwefel_12(iter beg, iter end) {
 
 int main(int argc, const char* argv[]) {
 	if (argc <= 2) {
-		printf("Usage: papso [number of subswarms] [iterations/task]\n");
+		std::printf("Usage: papso [number of subswarms] [iterations/task]\n");
 		return -1;
 	}
 
@@ -23,12 +23,11 @@ int main(int argc, const char* argv[]) {
 	size_t iter_per_task = std::stoul(std::string{ argv[2] });
 
 	hungbiu::hb_executor etor(fork_count);
-	using papso_t = basic_papso<hungbiu::spmc_buffer<vec_t>, 40>;
-	papso_t::optimization_problem_t problem{ test_functions::functions[3]
-										, test_functions::bounds[3]
-										, test_functions::dimensions[3] };
+	papso::optimization_problem_t problem{ test_functions::functions[1]
+										, test_functions::bounds[1]
+										, test_functions::dimensions[1] };
 
-	parallel_async_pso_benchmark<papso_t>(etor, fork_count, iter_per_task, problem, test_functions::function_names[3]);
+	parallel_async_pso_benchmark<papso>(etor, 8, iter_per_task, problem, test_functions::function_names[1]);
 	etor.done();
 	printf("steal count: %llu\n", etor.get_steal_count());
 }

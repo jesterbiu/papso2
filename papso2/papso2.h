@@ -364,17 +364,20 @@ public:
 		using worker_handle = hungbiu::hb_executor::worker_handle;
 
 		// Initialize
+		auto remainder = swarm_size % fork_count;
+		if (remainder) {
+			++fork_count;
+		}
 		state.initialize_state(fork_count);
 		state.initialize_swarm(state.rngs[0]);
 
 		// Forks
-		assert(0 == (swarm_size % fork_count));
 		size_t fork_size = swarm_size / fork_count;
 		for (size_t i = 0; i < fork_count; ++i) {
 			range_t subswarm_range;
 			subswarm_range.first = fork_size * i;
 			subswarm_range.second = (i + 1)* fork_size;
-			subswarm_range.second = std::min<size_t>(subswarm_range.second, basic_papso::swarm_size);
+			subswarm_range.second = std::min<size_t>(subswarm_range.second, swarm_size);
 
 			range_t iter_range = state.make_iteration_range(0);
 
@@ -384,6 +387,6 @@ public:
 		return basic_papso::papso_result_t{ std::move(pso_state_uptr) };
 	}
 };
-using papso = basic_papso<hungbiu::naive_spmc_buffer<vec_t>, 2u, 40u>;
+using papso = basic_papso<hungbiu::naive_spmc_buffer<vec_t>, 2u, 50u>;
 
 #endif

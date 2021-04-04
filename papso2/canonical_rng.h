@@ -8,7 +8,6 @@
 #include <memory>
 #include <new>
 #include <cstdlib>
-#include <cassert>
 class canonical_rng
 {	
 	struct alignas(64) storage {
@@ -30,7 +29,6 @@ public:
 	~canonical_rng() {}
 
 	inline double operator()() const {
-		assert(storage_ptr_.get());
 		auto& s = *storage_ptr_;
 		return s.real_distribute(s.generator_);
 	}

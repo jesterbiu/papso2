@@ -1,27 +1,23 @@
 #ifndef _EXECUTOR
 #define _EXECUTOR
-#include <type_traits>
 #include <memory>
+#include <type_traits>
 #include <vector>
 #include <cstddef>
 #include <random>
-#include <cassert>
 #include <concepts>
 #include <future>
 #include <condition_variable>
 #include <mutex>
 #include <thread>
 #include "concurrent_std_deque.h"
-#include "../../concurrent_data_structures/concurrent_data_structures/array_blocking_queue.h"
-//#define PRINT_ETOR
-#ifdef PRINT_ETOR
-#include <cstdio>
-#endif
+
 #define COUNT_STEALING
 
 // lazy spin up + cv
 namespace hungbiu
 {		
+	
 	class hb_executor
 	{			
 	public:	// Template aliases used by hb_executor
@@ -32,103 +28,18 @@ namespace hungbiu
 		class worker_handle; // Forward declaration
 
 	private:
-		// --------------------------------------------------------------------------------
-		// task_t
-		// Erase function object's type but leaves return type and arg type(s)
-		// --------------------------------------------------------------------------------
+		// r_task_wrapper: provide aysnc result
 		template <typename R>
-		using task_t = std::packaged_task<R(worker_handle&)>;
+		using r_task_wrapper = std::packaged_task<R(worker_handle&)>;
 		template <typename F, typename R>
-		static task_t<R> make_task(F&& func)
+		static r_task_wrapper<R> make_task(F&& func)
 		{
 			using F_decay = std::decay_t<F>;
-			return task_t<R>(std::forward<F_decay>(func));
+			return r_task_wrapper<R>(std::forward<F_decay>(func));
 		}
 
-		// --------------------------------------------------------------------------------
-		// task_wrapper
-		// Erase all type info
-		// --------------------------------------------------------------------------------    
-
-		// Provide task interface
-		struct task_wrapper_alloc_concept
-		{
-			virtual ~task_wrapper_alloc_concept() = default; // Require a dtor definition for
-													   // the derived class to instantiate
-			virtual void run(worker_handle&) = 0;
-		};
-
-		// Provide storage for an actual task
-		template <typename T>
-		struct task_wrapper_alloc_model : public task_wrapper_alloc_concept
-		{
-			T task_;
-		public:
-			~task_wrapper_alloc_model() {}
-			task_wrapper_alloc_model(T&& f) :
-				task_(std::forward<T>(f)) {}
-			task_wrapper_alloc_model(task_wrapper_alloc_model&& oth) :
-				task_(std::move(oth.task_)) {}
-			task_wrapper_alloc_model& operator=(task_wrapper_alloc_model&& rhs)
-			{
-				if (this != &rhs) {
-					task_ = std::move(rhs.task_);
-				}
-				return *this;
-			}
-
-			task_wrapper_alloc_model(const task_wrapper_alloc_model&) = delete;
-			task_wrapper_alloc_model& operator=(const task_wrapper_alloc_model&) = delete;
-
-			void run(worker_handle& h) override
-			{
-				task_.operator()(h);
-			}
-		};
-
-		// Provide total type erasure to support heterogeneous tasks
-		// Always heap-allocated
-		class task_wrapper_alloc
-		{
-			std::unique_ptr<task_wrapper_alloc_concept> task_vtable_;
-		public:
-			task_wrapper_alloc() : task_vtable_(nullptr) {}
-			template <typename T>
-			task_wrapper_alloc(T&& t)
-			{
-				using model_t = task_wrapper_alloc_model<T>;
-				task_vtable_ = std::make_unique<model_t>(std::move(t));
-			}
-			task_wrapper_alloc(task_wrapper_alloc&& oth) noexcept :
-				task_vtable_(std::move(oth.task_vtable_)) {}
-			~task_wrapper_alloc() {}
-			task_wrapper_alloc& operator=(task_wrapper_alloc&& rhs) noexcept
-			{
-				if (this != &rhs) {
-					task_vtable_ = std::move(rhs.task_vtable_);
-				}
-				return *this;
-			}
-
-			bool valid() const noexcept
-			{
-				return task_vtable_.get();
-			}
-			explicit operator bool() const noexcept
-			{
-				return task_vtable_.get();
-			}
-			void run(worker_handle& h)
-			{
-				assert(valid());
-				task_vtable_->run(h);
-			}
-		};
-
-		// --------------------------------------------------------------------------------
-		// task_wrapper with small object opitimization
-		// --------------------------------------------------------------------------------
-		struct task_wrapper_concept_sso
+		// task_wrapper: does not provide async result & SSO
+		struct task_wrapper_concept
 		{
 			void (*_destructor)(void*) noexcept;
 			void (*_move)(void*, void*) noexcept;
@@ -140,89 +51,89 @@ namespace hungbiu
 		static constexpr bool is_small_object() { return sizeof(T) <= small_size; }
 
 		template <typename T, bool Small = is_small_object<T>()>
-		struct task_wrapper_model_sso;
+		struct task_wrapper_model;
 		template <typename F>
-		struct task_wrapper_model_sso<F, true>
+		struct task_wrapper_model<F, true>
 		{
 			F task_;
 
 			template <typename U>
-			task_wrapper_model_sso(U&& func) :
+			task_wrapper_model(U&& func) :
 				task_(std::forward<F>(func)) {}
-			task_wrapper_model_sso(task_wrapper_model_sso&& oth) :
+			task_wrapper_model(task_wrapper_model&& oth) :
 				task_(std::move(oth.task_)) {}
-			~task_wrapper_model_sso() = default;
+			~task_wrapper_model() = default;
 
 			static void _destructor(void* p) noexcept
 			{
-				static_cast<task_wrapper_model_sso*>(p)->~task_wrapper_model_sso();
+				static_cast<task_wrapper_model*>(p)->~task_wrapper_model();
 			}
 			static void _move(void* lhs, void* rhs) noexcept
 			{
-				auto& model = *static_cast<task_wrapper_model_sso*>(rhs);
-				new (lhs) task_wrapper_model_sso(std::move(model));
+				auto& model = *static_cast<task_wrapper_model*>(rhs);
+				new (lhs) task_wrapper_model(std::move(model));
 			}
 			static void _run(void* p, worker_handle& h)
 			{
-				auto& t = static_cast<task_wrapper_model_sso*>(p)->task_;
+				auto& t = static_cast<task_wrapper_model*>(p)->task_;
 				std::invoke(t, h);
 			}
-			static constexpr task_wrapper_concept_sso vtable_ = { _destructor, _move, _run };
+			static constexpr task_wrapper_concept vtable_ = { _destructor, _move, _run };
 		};
 		template <typename F>
-		struct task_wrapper_model_sso<F, false>
+		struct task_wrapper_model<F, false>
 		{
 			std::unique_ptr<F> ptask_;
 
 			template <typename U>
-			task_wrapper_model_sso(U&& func) :
+			task_wrapper_model(U&& func) :
 				ptask_(std::make_unique<F>(std::forward<F>(func))) {}
-			task_wrapper_model_sso(task_wrapper_model_sso&& oth) :
+			task_wrapper_model(task_wrapper_model&& oth) :
 				ptask_(std::move(oth.ptask_)) {}
-			~task_wrapper_model_sso() = default;
+			~task_wrapper_model() = default;
 
 			static void _destructor(void* p) noexcept
 			{
-				static_cast<task_wrapper_model_sso*>(p)->~task_wrapper_model_sso();
+				static_cast<task_wrapper_model*>(p)->~task_wrapper_model();
 			}
 			static void _move(void* lhs, void* rhs) noexcept
 			{
-				auto& model = *static_cast<task_wrapper_model_sso*>(rhs);
-				new (lhs) task_wrapper_model_sso(std::move(model));
+				auto& model = *static_cast<task_wrapper_model*>(rhs);
+				new (lhs) task_wrapper_model(std::move(model));
 			}
 			static void _run(void* p, worker_handle& h)
 			{
-				auto pt = static_cast<task_wrapper_model_sso*>(p)->ptask_.get();
+				auto pt = static_cast<task_wrapper_model*>(p)->ptask_.get();
 				if (pt) std::invoke(*pt, h);
 			}
-			static constexpr task_wrapper_concept_sso vtable_ = { _destructor, _move, _run };
+			static constexpr task_wrapper_concept vtable_ = { _destructor, _move, _run };
 		};
 
-		class task_wrapper_sso
+		class task_wrapper
 		{
 			// Constness: the vtable is a const object!
-			const task_wrapper_concept_sso* task_vtable_{ nullptr };
+			const task_wrapper_concept* task_vtable_{ nullptr };
 			std::aligned_storage_t<small_size> task_;
 		public:
-			task_wrapper_sso() : task_() {}
+			task_wrapper() : task_() {}
 			template <typename T>
-			task_wrapper_sso(T&& t)
+			task_wrapper(T&& t)
 			{
 				using DecayT = std::decay_t<T>;
-				using model_t = task_wrapper_model_sso<DecayT>;
+				using model_t = task_wrapper_model<DecayT>;
 				task_vtable_ = &model_t::vtable_;
 				new (&task_) model_t(std::forward<DecayT>(t));
 			}
-			task_wrapper_sso(task_wrapper_sso&& oth) noexcept :
+			task_wrapper(task_wrapper&& oth) noexcept :
 				task_vtable_(oth.task_vtable_)
 			{
 				task_vtable_->_move(&task_, &oth.task_);
 			}
-			~task_wrapper_sso()
+			~task_wrapper()
 			{
 				if (task_vtable_) task_vtable_->_destructor(&task_);
 			}
-			task_wrapper_sso& operator=(task_wrapper_sso&& rhs) noexcept
+			task_wrapper& operator=(task_wrapper&& rhs) noexcept
 			{
 				if (this != &rhs) {
 					// Destroy current task if there is one
@@ -249,9 +160,6 @@ namespace hungbiu
 				if (task_vtable_) task_vtable_->_run(&task_, h);
 			}
 		};
-				
-		// Choose a flavor
-		using task_wrapper = task_wrapper_sso;
 
 		class worker; // Forward declaration because worker::get_handle() return a woker_handle object;
 					  // Have to be PRIVATE
@@ -277,7 +185,6 @@ namespace hungbiu
 			template <typename T>
 			static bool future_ready(const std::future<T>& fut)
 			{
-				assert(fut.valid());
 				const auto status = fut.wait_for(std::chrono::nanoseconds{ 0 });
 				return std::future_status::ready == status;
 			}
@@ -343,7 +250,7 @@ namespace hungbiu
 			//static constexpr unsigned Pending = 0b0010; // Has pending task
 			//static constexpr unsigned Running = 0b0100; // Executing task
 
-			unsigned alignas(64) unsigned pending_{ 0 };
+			alignas(64) unsigned pending_{ 0 };
 			rng_t rng_;
 
 			// Push a forked task onto stack
@@ -385,8 +292,8 @@ namespace hungbiu
 					printf("\n@worker %llu: ", this->index_);
 #endif
 					// This task wrapper must be destroyed at the end of the loop
-					task_wrapper tw; 
-					
+					task_wrapper tw;
+
 					// get work from local stack 
 					if (_pop(tw)) {
 #ifdef PRINT_ETOR
@@ -395,7 +302,7 @@ namespace hungbiu
 						tw.run(h);
 						continue;
 					}
-					
+
 					// steal from others
 					if (etor_->steal(tw, index_, &rng_)) {
 #ifdef PRINT_ETOR
@@ -404,7 +311,7 @@ namespace hungbiu
 						tw.run(h);
 						continue;
 					}
-					
+
 					// Try to go to sleep(waiting on a cv) if no task found
 					// The cv is hooked to `jthread` object so OS thread could be woken 
 					// during `cv.wait()` if `stop_requested()`
@@ -429,13 +336,13 @@ namespace hungbiu
 				printf("\n@worker %llu: quitting...\n", this->index_);
 #endif
 			}
-			[[nodiscard]] bool try_assign(task_wrapper& tw)
+			void assign(task_wrapper& tw)
 			{
-				return run_stack_.try_push_front(tw);
+				run_stack_.push_front(tw);
 			}
 			[[nodiscard]] bool try_steal(task_wrapper& tw) noexcept
 			{
-				return run_stack_.try_pop_front(tw);
+				return run_stack_.pop_front(tw);
 			}
 			void notify_work() {
 				{
@@ -471,7 +378,7 @@ namespace hungbiu
 		std::vector<std::jthread> threads_;
 
 #ifdef COUNT_STEALING
-		std::atomic<size_t> alignas(64) steal_count_ { 0 };
+		alignas(64) std::atomic<size_t> steal_count_ { 0 };
 #endif
 
 	public:
@@ -514,17 +421,13 @@ namespace hungbiu
 #ifdef PRINT_ETOR
 				printf("\n@dispatcher: ");
 #endif
-				if (workers_[idx % sz].try_assign(tw)) {
-					workers_[idx % sz].notify_work();
-					ticket_.compare_exchange_strong(idx, idx + 1, std::memory_order_acq_rel);
+
+				workers_[idx % sz].assign(tw);
+				workers_[idx % sz].notify_work();
+				ticket_.compare_exchange_strong(idx, idx + 1, std::memory_order_acq_rel);
 #ifdef PRINT_ETOR
-					printf("assign work to and notified @worker %llu\n", idx % sz);
+				printf("assign work to and notified @worker %llu\n", idx % sz);
 #endif
-					break;
-				}
-				else {
-					++idx;
-				}
 				// Fall back to sleep
 			}
 		} 
@@ -566,7 +469,7 @@ namespace hungbiu
 		}		
 			
 	public:				
-		hb_executor(std::size_t parallelism = std::thread::hardware_concurrency())
+		hb_executor(size_t parallelism)
 		{
 			workers_.reserve(parallelism);
 			threads_.reserve(parallelism);

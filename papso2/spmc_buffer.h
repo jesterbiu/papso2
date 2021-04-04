@@ -1,9 +1,9 @@
 #ifndef _SMPC_BUFFER
 #define _SMPC_BUFFER
 #define DEBUG_PRINT 0
-#include <cassert>
 #include <atomic>
 #include <array>
+#include <mutex>
 #include <shared_mutex>
 #if DEBUG_PRINT
 #include <stdio.h>
@@ -221,7 +221,6 @@ namespace hungbiu {
 						? new(ptr) T(std::forward<U>(val))  // Construct in-place
 						: new T(std::forward<U>(val));		// Allocate to construct
 			T* pold = pending_value_.exchange(pnew, std::memory_order_acq_rel);
-			assert(nullptr == pold); // Only one thread is allowed to write
 		}
 
 		// if (buffer[read_idx + 1].count == 0 && pending_update) 
@@ -381,5 +380,4 @@ namespace hungbiu {
 		}
 	};
 }
-
 #endif 
