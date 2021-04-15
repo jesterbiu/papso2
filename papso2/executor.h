@@ -10,14 +10,19 @@
 #include <condition_variable>
 #include <mutex>
 #include <thread>
+#ifdef _MSC_VER
+#define NOMINMAX
+#include <windows.h>
+#include <processthreadsapi.h>
+#include <winbase.h>
+#endif
 #include "concurrent_std_deque.h"
 
 #define COUNT_STEALING
 
 // lazy spin up + cv
 namespace hungbiu
-{		
-	
+{	
 	class hb_executor
 	{			
 	public:	// Template aliases used by hb_executor
@@ -287,7 +292,7 @@ namespace hungbiu
 			void operator()(std::stop_token stoken)
 			{
 				auto h = get_handle();
-				while (!etor_->is_done()) {
+				while (!etor_->is_done() && !stoken.stop_requested()) {
 #ifdef PRINT_ETOR
 					printf("\n@worker %llu: ", this->index_);
 #endif
@@ -361,8 +366,24 @@ namespace hungbiu
 		};
 
 		// Worker thread's main function
+		static auto get_thread_affinity_mask(unsigned index) {
+			// Allow the thread to run on 2 logical processors to create scheduling slack
+			// Actually this targets hyperthreading
+			unsigned group_count = std::thread::hardware_concurrency() / 2;
+			auto my_group = index % group_count;
+			auto my_mask =
+				(1 << (2 * my_group))
+				| (1 << (2 * my_group + 1));
+			return my_mask;
+		}
 		static void thread_main(std::stop_token stoken, hb_executor* this_, std::size_t init_idx)
 		{
+			// Pin thread to processor
+#ifdef _MSC_VER
+			if (!SetThreadAffinityMask(GetCurrentThread(), get_thread_affinity_mask(init_idx))) {
+				throw std::exception{ "failed to set thread affinity!" };
+			}
+#endif
 #ifdef PRINT_ETOR
 			printf("@thread %llu: spinning up\n", init_idx);
 #endif

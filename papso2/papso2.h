@@ -26,7 +26,7 @@ struct optimization_problem_t {
 	size_t dimension;
 };
 
-template <typename buffer_t, size_t neighbor_size, size_t swarm_size, size_t iteration = 5000u>
+template <typename buffer_t, size_t neighbor_size, size_t swarm_size, size_t iteration>
 class basic_papso {
 	class alignas(64) aligned_atomic_double {
 		std::atomic<double> value_;
@@ -62,7 +62,7 @@ public:
 	using worker_handle = hungbiu::hb_executor::worker_handle;
 
 	static constexpr size_t swarm_size = swarm_size;
-	static constexpr bool track_convergency = true;
+	static constexpr bool track_convergency = false;
 
 private:
 

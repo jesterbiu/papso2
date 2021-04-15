@@ -21,17 +21,19 @@ static void benchmark_papso(benchmark::State& state) {
 		}
     }        
 }
-//BENCHMARK(benchmark_papso)
-//->Unit(benchmark::kMillisecond)
-//->Args({ 1, 1000 })
-//->Args({ 2, 1000 })
-//->Args({ 4, 1000 })
-//->Args({ 1, 500 })
-//->Args({ 2, 500 })
-//->Args({ 4, 500 })
-//->Args({ 1, 200 })
-//->Args({ 2, 200 })
-//->Args({ 4, 200 }); //->Repitions
+
+BENCHMARK(benchmark_papso)
+->Iterations(1)
+->Repetitions(5)
+->Unit(benchmark::kMillisecond)
+->Args({ 1, 500 })
+->Args({ 2, 500 })
+->Args({ 3, 500 })
+->Args({ 4, 500 })
+->Args({ 5, 500 })
+->Args({ 6, 500 })
+->Args({ 7, 500 })
+->Args({ 8, 500 });
 
 // Args: [function idx] [dimensions] [iterations]
 static void benchmark_test_functions(benchmark::State& state) {
@@ -120,11 +122,11 @@ static void benchmark_stealing(benchmark::State& state) {
 	}
 }
 
-BENCHMARK(benchmark_stealing)
-->Unit(benchmark::kMillisecond)
-->Args({ 4, 4, 500 })
-->Args({ 5, 5, 500 })
-->Repetitions(10);
+//BENCHMARK(benchmark_stealing)
+//->Unit(benchmark::kMillisecond)
+//->Args({ 4, 4, 500 })
+//->Args({ 5, 5, 500 })
+//->Repetitions(10);
 
 // Args: [fork_count]
 template <int sz> requires (sz > 0)
