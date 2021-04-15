@@ -109,7 +109,7 @@ namespace hungbiu {
 		public:
 			viewer(read_lock rlock, const T* pval) :
 				pval_(pval), rlock_(std::move(rlock)) {}
-			viewer(viewer&& oth) :
+			viewer(viewer&& oth) noexcept :
 				pval_(oth.pval_), rlock_(std::move(oth.rlock_)) {}
 			~viewer() {}
 
@@ -269,7 +269,7 @@ namespace hungbiu {
 
 	public:
 		spmc_buffer() {}
-		spmc_buffer(spmc_buffer&& oth) {
+		spmc_buffer(spmc_buffer&& oth) noexcept {
 			auto p = oth.pending_value_.exchange(nullptr);
 			if (!p) {
 				auto idx = oth.read_index_.load();

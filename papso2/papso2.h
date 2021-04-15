@@ -20,6 +20,12 @@ using iter = vec_t::const_iterator;
 using func_t = double(*)(iter, iter);
 using bound_t = std::pair<double, double>;
 
+struct optimization_problem_t {
+	const func_t function;
+	bound_t feasible_bound;
+	size_t dimension;
+};
+
 template <typename buffer_t, size_t neighbor_size, size_t swarm_size>
 class basic_papso {
 	template <typename T>
@@ -351,12 +357,6 @@ public:
 		}
 	};
 
-	// stuff this into `state` object later
-	struct optimization_problem_t {
-		const func_t function;
-		bound_t feasible_bound;
-		size_t dimension;
-	};
 	static auto parallel_async_pso(hungbiu::hb_executor& etor, size_t fork_count, size_t iter_per_task, const optimization_problem_t& problem) {
 		auto pso_state_uptr = std::make_unique<basic_papso>(problem.function, problem.feasible_bound, problem.dimension, iter_per_task);
 		auto& state = *pso_state_uptr;
@@ -387,6 +387,7 @@ public:
 		return basic_papso::papso_result_t{ std::move(pso_state_uptr) };
 	}
 };
-using papso = basic_papso<hungbiu::naive_spmc_buffer<vec_t>, 2u, 50u>;
+
+using papso = basic_papso<hungbiu::spmc_buffer<vec_t>, 2, 40>;
 
 #endif

@@ -23,13 +23,13 @@ int main(int argc, const char* argv[]) {
 	size_t iter_per_task = std::stoul(std::string{ argv[2] });
 
 	hungbiu::hb_executor etor(fork_count);
-	papso::optimization_problem_t problem{ test_functions::functions[1]
+	optimization_problem_t problem{ test_functions::functions[1]
 										, test_functions::bounds[1]
 										, test_functions::dimensions[1] };
 
 	parallel_async_pso_benchmark<papso>(etor, 8, iter_per_task, problem, test_functions::function_names[1]);
 	etor.done();
-	printf("steal count: %llu\n", etor.get_steal_count());
+	std::printf("steal count: %llu\n", etor.get_steal_count());
 }
 
 

@@ -8,7 +8,7 @@ void parallel_async_pso_benchmark(
 	hungbiu::hb_executor& etor
 	, std::size_t fork_count
 	, std::size_t iter_per_task
-	, typename papso_t::optimization_problem_t problem
+	, optimization_problem_t problem
 	, const char* const msg) {
 
 	for (int i = 0; i < 10; ++i) {

@@ -361,3 +361,9 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/papso2/.vscode/launch.json
+/papso2/.vscode/settings.json
+/papso2/VTune Profiler Results/papso2/papso2.vtuneproj
+/papso2/VTune Profiler Results/papso2/r003tr.vtunelink
+/papso2/VTune Profiler Results/papso2/papso2_spmc_snapshot.vtunelink
+/papso2/VTune Profiler Results/papso2/papso2_8_5000_hotspot.vtunelink

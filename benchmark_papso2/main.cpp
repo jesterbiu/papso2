@@ -11,7 +11,7 @@ static void benchmark_papso(benchmark::State& state) {
 	hungbiu::hb_executor etor(fork_count);
     for (auto _ : state) {
 		for (size_t i = 0; i < test_functions::functions.size(); ++i) {
-			papso::optimization_problem_t problem{ 
+			optimization_problem_t problem{ 
 				test_functions::functions[i]
 				, test_functions::bounds[i]
 				, test_functions::dimensions[i] 
@@ -108,7 +108,7 @@ static void benchmark_stealing(benchmark::State& state) {
 	const auto itr_per_task = state.range(2);
 	const auto func_index = 1;
 	// Bench
-	papso::optimization_problem_t problem{
+	optimization_problem_t problem{
 		test_functions::functions[func_index],
 		test_functions::bounds[func_index],
 		test_functions::dimensions[func_index]
@@ -140,7 +140,7 @@ void benchmark_particle_communication(benchmark::State& state) {
 
 	const auto fork_count = state.range(0);
 	
-	papso::optimization_problem_t problem{
+	optimization_problem_t problem{
 		test_functions::functions[3],
 		test_functions::bounds[3],
 		test_functions::dimensions[3]
