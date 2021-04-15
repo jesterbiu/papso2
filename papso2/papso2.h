@@ -26,22 +26,21 @@ struct optimization_problem_t {
 	size_t dimension;
 };
 
-template <typename buffer_t, size_t neighbor_size, size_t swarm_size>
+template <typename buffer_t, size_t neighbor_size, size_t swarm_size, size_t iteration = 5000u>
 class basic_papso {
-	template <typename T>
-	class alignas(64) aligned_atomic_t {
-		std::atomic<T> value_;
+	class alignas(64) aligned_atomic_double {
+		std::atomic<double> value_;
 	public:
-		aligned_atomic_t(T desired = std::numeric_limits<double>::max()) 
+		aligned_atomic_double(double desired = std::numeric_limits<double>::max()) 
 			: value_(desired) {}
-		aligned_atomic_t(aligned_atomic_t&& oth) noexcept 
+		aligned_atomic_double(aligned_atomic_double&& oth) noexcept 
 			: value_(oth.load()) {}
-		~aligned_atomic_t() {}
+		~aligned_atomic_double() {}
 
-		T load() const noexcept {
+		double load() const noexcept {
 			return value_.load(std::memory_order_acquire);
 		}
-		void store(T desired) noexcept {
+		void store(double desired) noexcept {
 			value_.store(desired, std::memory_order_release);
 		}
 	};
@@ -57,14 +56,13 @@ class basic_papso {
 public:
 
 	using particle = my_particle;
-	using atomic_double = aligned_atomic_t<double>;
+	using atomic_double = aligned_atomic_double;
 	using size_t = std::size_t;
 	using range_t = std::pair<size_t, size_t>;
 	using worker_handle = hungbiu::hb_executor::worker_handle;
 
 	static constexpr size_t swarm_size = swarm_size;
-	static constexpr size_t iteration = 5000u;
-	static constexpr bool track_convergency = false;
+	static constexpr bool track_convergency = true;
 
 private:
 
@@ -305,9 +303,12 @@ private:
 
 			} // end of particle
 
-			if ((i + 1) % 100 == 0) {
-				auto gbest = update_gbest();
-				if (track_convergency) {
+			if constexpr (track_convergency) {
+				// Only one subswarm would periodly update, print global best
+				// Here the first subswarm is chosen
+				if (0 == subswarm_range.first 
+				&& (i + 1) % 100 == 0) {
+					auto gbest = update_gbest();
 					printf("%6.4lf ", gbest.best_value);
 				}
 			}
@@ -388,6 +389,6 @@ public:
 	}
 };
 
-using papso = basic_papso<hungbiu::spmc_buffer<vec_t>, 2, 40>;
+using papso = basic_papso<hungbiu::spmc_buffer<vec_t>, 2, 40, 1000>;
 
 #endif

@@ -312,25 +312,28 @@ namespace hungbiu
 						continue;
 					}
 
+					// Give up time slice
+					std::this_thread::yield();
+
 					// Try to go to sleep(waiting on a cv) if no task found
 					// The cv is hooked to `jthread` object so OS thread could be woken 
 					// during `cv.wait()` if `stop_requested()`
-					{
-#ifdef PRINT_ETOR
-						printf("no work, tryna sleep, lock the mutex...\n");
-#endif					
-						std::unique_lock lock{ mtx_ };
-						// Wait for notification or stop request(interrupts)
-						cv_.wait(lock, stoken, [this]() { return pending_; });
-
-#ifdef PRINT_ETOR
-						printf("@worker %llu: ...mutex relocked, wake up to see\n", this->index_);
-#endif
-						if (stoken.stop_requested()) {
-							break;
-						}
-						pending_ = false;
-					} // end of unique lock
+//					{
+//#ifdef PRINT_ETOR
+//						printf("no work, tryna sleep, lock the mutex...\n");
+//#endif					
+//						std::unique_lock lock{ mtx_ };
+//						// Wait for notification or stop request(interrupts)
+//						cv_.wait(lock, stoken, [this]() { return pending_; });
+//
+//#ifdef PRINT_ETOR
+//						printf("@worker %llu: ...mutex relocked, wake up to see\n", this->index_);
+//#endif
+//						if (stoken.stop_requested()) {
+//							break;
+//						}
+//						pending_ = false;
+//					} // end of unique lock
 				} // End of while loop
 #ifdef PRINT_ETOR
 				printf("\n@worker %llu: quitting...\n", this->index_);
@@ -417,19 +420,17 @@ namespace hungbiu
 		{
 			auto idx = ticket_.load();
 			const auto sz = workers_.size();
-			for (;;) {
+			
 #ifdef PRINT_ETOR
 				printf("\n@dispatcher: ");
 #endif
 
-				workers_[idx % sz].assign(tw);
-				workers_[idx % sz].notify_work();
-				ticket_.compare_exchange_strong(idx, idx + 1, std::memory_order_acq_rel);
+			workers_[idx % sz].assign(tw);
+			workers_[idx % sz].notify_work();
+			ticket_.compare_exchange_strong(idx, idx + 1, std::memory_order_acq_rel);
 #ifdef PRINT_ETOR
 				printf("assign work to and notified @worker %llu\n", idx % sz);
-#endif
-				// Fall back to sleep
-			}
+#endif			
 		} 
 		[[nodiscard]] bool steal(task_wrapper& tw, const std::size_t idx, rng_t* rng)
 		{

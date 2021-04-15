@@ -27,7 +27,7 @@ int main(int argc, const char* argv[]) {
 										, test_functions::bounds[1]
 										, test_functions::dimensions[1] };
 
-	parallel_async_pso_benchmark<papso>(etor, 8, iter_per_task, problem, test_functions::function_names[1]);
+	parallel_async_pso_benchmark<papso>(etor, fork_count, iter_per_task, problem, test_functions::function_names[1]);
 	etor.done();
 	std::printf("steal count: %llu\n", etor.get_steal_count());
 }
