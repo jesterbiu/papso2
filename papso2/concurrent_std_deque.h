@@ -3,14 +3,13 @@
 #include <deque>
 #include <mutex>
 #include <atomic>
-#include "../../concurrent_data_structures/concurrent_data_structures/spinlock.h"
 namespace hungbiu
 {
 	template <typename T>
 	class concurrent_std_deque
 	{
 		using lock_t = std::mutex;
-		spinlock alignas(64) lock_;
+		lock_t alignas(64) lock_;
 		std::deque<T> deque_;
 		std::atomic<std::size_t> size_{ 0 };
 
