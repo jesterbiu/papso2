@@ -297,7 +297,7 @@ namespace hungbiu
 					}
 
 					// steal from others
-					static constexpr bool enable_stealing = false;
+					static constexpr bool enable_stealing = true;
 					if constexpr (enable_stealing) {
 						if (etor_->steal(tw, index_, &rng_)) {
 							tw.run(h);
@@ -334,11 +334,8 @@ namespace hungbiu
 		static auto get_thread_affinity_mask(unsigned index) {
 			// Allow the thread to run on 2 logical processors to create scheduling slack
 			// Actually this targets hyperthreading
-			unsigned group_count = std::thread::hardware_concurrency() / 2;
-			auto my_group = index % group_count;
-			auto my_mask =
-				(1 << (2 * my_group))
-				| (1 << (2 * my_group + 1));
+			const unsigned core_count = std::thread::hardware_concurrency();
+			auto my_mask = 1 << (index % core_count);
 			return my_mask;
 		}
 		static void thread_main(std::stop_token stoken, hb_executor* this_, std::size_t init_idx)
