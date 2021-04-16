@@ -5,6 +5,7 @@
 #include <cstdio>
 
 static constexpr auto schwefel_12 = test_functions::functions[1];
+#pragma optimize("", off)
 template <size_t Scale> requires (Scale > 0)
 double scaled_schwefel_12(iter beg, iter end) {
 	volatile double result = 0;
@@ -13,7 +14,6 @@ double scaled_schwefel_12(iter beg, iter end) {
 	}
 	return result;
 }
-
 #pragma optimize("", on)
 
 int main(int argc, const char* argv[]) {
@@ -25,12 +25,16 @@ int main(int argc, const char* argv[]) {
 	size_t fork_count = std::stoul(std::string{ argv[1] });
 	size_t iter_per_task = std::stoul(std::string{ argv[2] });
 
-	hungbiu::hb_executor etor(fork_count);
-	optimization_problem_t problem{ test_functions::functions[1]
-										, test_functions::bounds[1]
-										, test_functions::dimensions[1] };
+	size_t thread_count = argc < 4
+		? fork_count
+		: std::stoul(std::string{ argv[3] });
 
-	parallel_async_pso_benchmark<papso>(etor, fork_count, iter_per_task, problem, test_functions::function_names[1]);
+	hungbiu::hb_executor etor(thread_count);
+	optimization_problem_t problem{ &scaled_schwefel_12<4>
+									, test_functions::bounds[1]
+									, test_functions::dimensions[1] };
+	using papso_t = basic_papso<hungbiu::spmc_buffer<vec_t>, 2, 48, 5000>;
+	parallel_async_pso_benchmark<papso_t>(etor, fork_count, iter_per_task, problem, test_functions::function_names[1]);
 	etor.done();
 }
 

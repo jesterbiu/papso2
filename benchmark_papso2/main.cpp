@@ -34,7 +34,7 @@ static void benchmark_papso(benchmark::State& state) {
 	hungbiu::hb_executor etor{ static_cast<size_t>(state.range(2)) };
 
 	const optimization_problem_t problem{
-			&scaled_schwefel_12<4>
+			&scaled_schwefel_12<8>
 			, test_functions::bounds[1]
 			, test_functions::dimensions[1]
 	};
@@ -44,24 +44,31 @@ static void benchmark_papso(benchmark::State& state) {
 		benchmark::DoNotOptimize(result.get());
     }        
 }
+// find the best stealing task granularity
+//BENCHMARK(benchmark_papso)
+//->Iterations(1)
+//->Repetitions(10)
+//->Unit(benchmark::kMillisecond)
+//->Args({ 8, 5000, 8 }) // 6 * 5000
+//->Args({ 8, 500, 8 }) //  6 * 500
+//->Args({ 16, 200, 8 }) // 3 * 200
+//->Args({ 24, 100, 8 }); // 2 * 100
 
-BENCHMARK(benchmark_papso)
-->Iterations(1)
-->Repetitions(5)
-->Unit(benchmark::kMillisecond)
-->Args({ 4, 1, 2 })
-->Args({ 4, 1, 3 })
-->Args({ 4, 1, 4 });
-//->Args({ 5, 500 })
-//->Args({ 6, 500 })
-//->Args({ 7, 500 })
-//->Args({ 8, 500 });
+//BENCHMARK(benchmark_papso)
+//->Iterations(1)
+//->Repetitions(5)
+//->Unit(benchmark::kMillisecond)
+//->Args({ 8, 500, 8 })
+//->Args({ 8, 200, 8 })
+//->Args({ 8, 100, 8 })
+//->Args({ 12, 100, 8 })
+//->Args({ 16, 100, 8 })
+//->Args({ 24, 100, 8 });
 
 // Args: [function idx] [dimensions] [iterations]
 static void benchmark_test_functions(benchmark::State& state) {
 	const auto idx = state.range(0);
-	const auto dim = state.range(1);
-	const auto itr = state.range(2);
+	const auto dim = test_functions::dimensions[idx];
 	const auto min = test_functions::bounds[idx].first;
 	const auto max = test_functions::bounds[idx].second;
 	const auto diff = max - min;
@@ -72,17 +79,12 @@ static void benchmark_test_functions(benchmark::State& state) {
 		return min + rng() * diff;	});
 
 	for (auto _ : state) {
-		for (int i = 0; i < itr; ++i) {
-			test_functions::functions[idx](vec.cbegin(), vec.cend());
-		}
+		benchmark::DoNotOptimize(test_functions::functions[idx](vec.cbegin(), vec.cend()));
 	}
 }
-//
 //BENCHMARK(benchmark_test_functions)
-//->Args({ 1, 30, 1 })
-//->Args({ 1, 30, 100 })
-//->Args({ 1, 100, 1 })
-//->Args({ 1, 100, 100 });
+//->Arg(0)->Arg(1)->Arg(2)->Arg(3)->Arg(4)->Arg(5)->Arg(6)->Arg(7);
+
 
 
 template <int N> // N iteartions, Args: [fork_count] [itr_per_task] [dimensions] 
@@ -158,37 +160,65 @@ double time_scaled_func(iter beg, iter end) { // 420ns
 	}
 	return test_functions::functions[3](beg, end);
 }
-template <typename buffer_t, size_t nb_sz>
-void benchmark_particle_communication(benchmark::State& state) {
-	using papso_t = basic_papso<buffer_t, nb_sz, nb_sz>; // global topology
-
-	const auto fork_count = state.range(0);
+template <size_t nb_sz>
+void benchmark_particle_communication(benchmark::State& state) {	
+	using papso_t = basic_papso<hungbiu::spmc_buffer<vec_t>, nb_sz, 48, 5000>;
 	
 	optimization_problem_t problem{
 		test_functions::functions[3],
 		test_functions::bounds[3],
-		test_functions::dimensions[3]
+		state.range(2)
 	};
 
-	hungbiu::hb_executor etor(fork_count);
+	size_t fork_count = static_cast<size_t>(state.range(0));
+	size_t iter_per_task = static_cast<size_t>(state.range(1));
 
+	hungbiu::hb_executor etor(fork_count);
 	for (auto _ : state) {
-		auto result = papso::parallel_async_pso(etor, fork_count, 5000, problem);
+		auto result = papso_t::parallel_async_pso(etor, fork_count, iter_per_task, problem);
 		benchmark::DoNotOptimize(result.get());
 	}
 }
-using naive_buffer = hungbiu::naive_spmc_buffer<vec_t>;
-using my_buffer = hungbiu::spmc_buffer<vec_t>;/*
 
 // Neighbor hood size
-BENCHMARK_TEMPLATE(benchmark_particle_communication, naive_buffer, 2u, 1)
-->Unit(benchmark::kMillisecond)->Arg(4)->Iterations(10)->Repetitions(10);
-BENCHMARK_TEMPLATE(benchmark_particle_communication, naive_buffer, 12u, 1)
-->Unit(benchmark::kMillisecond)->Arg(4)->Iterations(10)->Repetitions(10);
-BENCHMARK_TEMPLATE(benchmark_particle_communication, naive_buffer, 24u, 1)
-->Unit(benchmark::kMillisecond)->Arg(4)->Iterations(10)->Repetitions(10);
-BENCHMARK_TEMPLATE(benchmark_particle_communication, naive_buffer, 36u, 1)
-->Unit(benchmark::kMillisecond)->Arg(4)->Iterations(10)->Repetitions(10);*/
+BENCHMARK_TEMPLATE(benchmark_particle_communication, 2u) // lbest
+->Unit(benchmark::kMillisecond)->Iterations(1)->Repetitions(10)
+->Args({ 16, 500, 30 })
+->Args({ 16, 500, 50 })
+->Args({ 16, 500, 70 })
+->Args({ 16, 500, 100 });
+BENCHMARK_TEMPLATE(benchmark_particle_communication, 8u)
+->Unit(benchmark::kMillisecond)->Iterations(1)->Repetitions(10)
+->Args({ 16, 500, 30 })
+->Args({ 16, 500, 50 })
+->Args({ 16, 500, 70 })
+->Args({ 16, 500, 100 });
+BENCHMARK_TEMPLATE(benchmark_particle_communication, 16u)
+->Unit(benchmark::kMillisecond)->Iterations(1)->Repetitions(10)
+->Args({ 16, 500, 30 })
+->Args({ 16, 500, 50 })
+->Args({ 16, 500, 70 })
+->Args({ 16, 500, 100 });
+BENCHMARK_TEMPLATE(benchmark_particle_communication, 24u)
+->Unit(benchmark::kMillisecond)->Iterations(1)->Repetitions(10)
+->Args({ 16, 500, 30 })
+->Args({ 16, 500, 50 })
+->Args({ 16, 500, 70 })
+->Args({ 16, 500, 100 });
+
+BENCHMARK_TEMPLATE(benchmark_particle_communication, 32u)
+->Unit(benchmark::kMillisecond)->Iterations(1)->Repetitions(10)
+->Args({ 16, 500, 30 })
+->Args({ 16, 500, 50 })
+->Args({ 16, 500, 70 })
+->Args({ 16, 500, 100 });
+
+BENCHMARK_TEMPLATE(benchmark_particle_communication, 40u) // gbest
+->Unit(benchmark::kMillisecond)->Iterations(1)->Repetitions(10)
+->Args({ 16, 500, 30 })
+->Args({ 16, 500, 50 })
+->Args({ 16, 500, 70 })
+->Args({ 16, 500, 100 });
 
 // Communication cost - Forks
 //BENCHMARK_TEMPLATE(benchmark_particle_communication, naive_buffer, 40u, 1)
