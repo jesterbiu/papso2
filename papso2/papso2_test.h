@@ -15,6 +15,9 @@ void parallel_async_pso_benchmark(
 		auto result = papso_t::parallel_async_pso(etor, fork_count, iter_per_task, problem);
 		auto [v, pos] = result.get(); // Could be wasting?
 		printf_s("\npar async pso @%s: %lf\n", msg, v);
+#ifdef COUNT_STEALING
+		std::printf("steal count: %llu\n", etor.get_steal_count());
+#endif
 		printf("\n");
 	}
 }

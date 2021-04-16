@@ -1,14 +1,17 @@
-// This is for profiling and demonstrating
+// This is for profiling and demonstratin
+#define COUNT_STEALING
+#define PAPSO2_TRACK_CONVERGENCY
 #include "papso2_test.h"
 #include <cstdio>
 
 static constexpr auto schwefel_12 = test_functions::functions[1];
-#pragma optimize("", off)
+template <size_t Scale> requires (Scale > 0)
 double scaled_schwefel_12(iter beg, iter end) {
-	for (int i = 0; i < 9; ++i) {
-		schwefel_12(beg, end);
+	volatile double result = 0;
+	for (size_t i = 0; i < Scale; ++i) {
+		result = schwefel_12(beg, end);
 	}
-	return schwefel_12(beg, end);
+	return result;
 }
 
 #pragma optimize("", on)
@@ -29,7 +32,6 @@ int main(int argc, const char* argv[]) {
 
 	parallel_async_pso_benchmark<papso>(etor, fork_count, iter_per_task, problem, test_functions::function_names[1]);
 	etor.done();
-	std::printf("steal count: %llu\n", etor.get_steal_count());
 }
 
 

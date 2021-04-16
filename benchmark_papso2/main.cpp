@@ -1,24 +1,47 @@
 #pragma comment ( lib, "Shlwapi.lib" )
 #include "../../google_benchmark/include/benchmark/benchmark.h"
-#include "../../hb_executor/hb_executor/executor.h"
+#include "../papso2/executor.h"
 #include "../papso2/papso2_test.h"
 
+static constexpr auto schwefel_12 = test_functions::functions[1];
+template <size_t Scale> requires (Scale > 0)
+double scaled_schwefel_12(iter beg, iter end) {
+	double result = 0;
+	for (int i = 0; i < Scale; ++i) {
+		benchmark::DoNotOptimize( result = schwefel_12(beg, end) );
+	}
+	return result;
+}
+
+static void benchmark_executor_create(benchmark::State& state) {
+	const auto count = state.range(0);
+	for (auto _ : state) {
+		benchmark::DoNotOptimize(hungbiu::hb_executor{ static_cast<size_t>(count) });
+	}
+}
+//BENCHMARK(benchmark_executor_create)
+//->Unit(benchmark::kMicrosecond)
+//->Arg(1)->Arg(2)->Arg(3)->Arg(4)->Arg(5)->Arg(6)->Arg(7)->Arg(8);
+
+
 // Bench speed of optimizing test functions suite
-// Args: [fork_count] [iter_per_task]
+// Args: [fork_count] [iter_per_task] [thread_count]
 static void benchmark_papso(benchmark::State& state) {
+	using papso_t = basic_papso<hungbiu::spmc_buffer<vec_t>, 2, 48, 5000>;
+
 	size_t fork_count = state.range(0);
 	size_t iter_per_task = state.range(1);
-	hungbiu::hb_executor etor(fork_count);
+	hungbiu::hb_executor etor{ static_cast<size_t>(state.range(2)) };
+
+	const optimization_problem_t problem{
+			&scaled_schwefel_12<4>
+			, test_functions::bounds[1]
+			, test_functions::dimensions[1]
+	};
+
     for (auto _ : state) {
-		for (size_t i = 0; i < test_functions::functions.size(); ++i) {
-			optimization_problem_t problem{ 
-				test_functions::functions[i]
-				, test_functions::bounds[i]
-				, test_functions::dimensions[i] 
-			};
-			auto result = papso::parallel_async_pso(etor, fork_count, iter_per_task, problem);
-			benchmark::DoNotOptimize(result.get());
-		}
+		auto result = papso_t::parallel_async_pso(etor, fork_count, iter_per_task, problem);
+		benchmark::DoNotOptimize(result.get());
     }        
 }
 
@@ -26,14 +49,13 @@ BENCHMARK(benchmark_papso)
 ->Iterations(1)
 ->Repetitions(5)
 ->Unit(benchmark::kMillisecond)
-->Args({ 1, 500 })
-->Args({ 2, 500 })
-->Args({ 3, 500 })
-->Args({ 4, 500 })
-->Args({ 5, 500 })
-->Args({ 6, 500 })
-->Args({ 7, 500 })
-->Args({ 8, 500 });
+->Args({ 4, 1, 2 })
+->Args({ 4, 1, 3 })
+->Args({ 4, 1, 4 });
+//->Args({ 5, 500 })
+//->Args({ 6, 500 })
+//->Args({ 7, 500 })
+//->Args({ 8, 500 });
 
 // Args: [function idx] [dimensions] [iterations]
 static void benchmark_test_functions(benchmark::State& state) {

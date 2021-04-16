@@ -62,7 +62,6 @@ public:
 	using worker_handle = hungbiu::hb_executor::worker_handle;
 
 	static constexpr size_t swarm_size = swarm_size;
-	static constexpr bool track_convergency = false;
 
 private:
 
@@ -303,7 +302,7 @@ private:
 
 			} // end of particle
 
-			if constexpr (track_convergency) {
+#ifdef PAPSO2_TRACK_CONVERGENCY
 				// Only one subswarm would periodly update, print global best
 				// Here the first subswarm is chosen
 				if (0 == subswarm_range.first 
@@ -311,7 +310,7 @@ private:
 					auto gbest = update_gbest();
 					printf("%6.4lf ", gbest.best_value);
 				}
-			}
+#endif
 		} // end of iteration
 		
 		// Fork next iterations
@@ -389,6 +388,6 @@ public:
 	}
 };
 
-using papso = basic_papso<hungbiu::spmc_buffer<vec_t>, 2, 40, 1000>;
+using papso = basic_papso<hungbiu::spmc_buffer<vec_t>, 2, 40, 5000>;
 
 #endif

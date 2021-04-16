@@ -18,8 +18,6 @@
 #endif
 #include "concurrent_std_deque.h"
 
-#define COUNT_STEALING
-
 // lazy spin up + cv
 namespace hungbiu
 {	
@@ -276,11 +274,7 @@ namespace hungbiu
 			//static constexpr auto RUN_QUEUE_SIZE = 256u;
 			worker(hb_executor& etor, std::size_t idx) :
 				etor_(&etor), index_(idx) {}
-			~worker() {
-#ifdef PRINT_ETOR
-				printf("~worker(): @%llu\n", this->index_);
-#endif
-			}
+			~worker() {}
 			worker(worker&& oth) noexcept // Should not be used, only for vector
 				: etor_(std::exchange(oth.etor_, nullptr))
 				, index_(std::exchange(oth.index_, -1))
@@ -293,56 +287,27 @@ namespace hungbiu
 			{
 				auto h = get_handle();
 				while (!etor_->is_done() && !stoken.stop_requested()) {
-#ifdef PRINT_ETOR
-					printf("\n@worker %llu: ", this->index_);
-#endif
 					// This task wrapper must be destroyed at the end of the loop
 					task_wrapper tw;
 
 					// get work from local stack 
 					if (_pop(tw)) {
-#ifdef PRINT_ETOR
-						printf("get work from local queue\n");
-#endif
 						tw.run(h);
 						continue;
 					}
 
 					// steal from others
-					if (etor_->steal(tw, index_, &rng_)) {
-#ifdef PRINT_ETOR
-						printf("steal work from others\n");
-#endif
-						tw.run(h);
-						continue;
+					static constexpr bool enable_stealing = false;
+					if constexpr (enable_stealing) {
+						if (etor_->steal(tw, index_, &rng_)) {
+							tw.run(h);
+							continue;
+						}
 					}
 
 					// Give up time slice
 					std::this_thread::yield();
-
-					// Try to go to sleep(waiting on a cv) if no task found
-					// The cv is hooked to `jthread` object so OS thread could be woken 
-					// during `cv.wait()` if `stop_requested()`
-//					{
-//#ifdef PRINT_ETOR
-//						printf("no work, tryna sleep, lock the mutex...\n");
-//#endif					
-//						std::unique_lock lock{ mtx_ };
-//						// Wait for notification or stop request(interrupts)
-//						cv_.wait(lock, stoken, [this]() { return pending_; });
-//
-//#ifdef PRINT_ETOR
-//						printf("@worker %llu: ...mutex relocked, wake up to see\n", this->index_);
-//#endif
-//						if (stoken.stop_requested()) {
-//							break;
-//						}
-//						pending_ = false;
-//					} // end of unique lock
 				} // End of while loop
-#ifdef PRINT_ETOR
-				printf("\n@worker %llu: quitting...\n", this->index_);
-#endif
 			}
 			void assign(task_wrapper& tw)
 			{
@@ -384,13 +349,7 @@ namespace hungbiu
 				throw std::exception{ "failed to set thread affinity!" };
 			}
 #endif
-#ifdef PRINT_ETOR
-			printf("@thread %llu: spinning up\n", init_idx);
-#endif
-			this_->workers_[init_idx].operator()(std::move(stoken));
-#ifdef PRINT_ETOR
-			printf("@thread: shutting down\n");
-#endif
+			this_->workers_[init_idx].operator()(stoken);
 		}
 		
 		// --------------------------------------------------------------------------------
@@ -441,48 +400,17 @@ namespace hungbiu
 		{
 			auto idx = ticket_.load();
 			const auto sz = workers_.size();
-			
-#ifdef PRINT_ETOR
-				printf("\n@dispatcher: ");
-#endif
-
 			workers_[idx % sz].assign(tw);
 			workers_[idx % sz].notify_work();
 			ticket_.compare_exchange_strong(idx, idx + 1, std::memory_order_acq_rel);
-#ifdef PRINT_ETOR
-				printf("assign work to and notified @worker %llu\n", idx % sz);
-#endif			
 		} 
 		[[nodiscard]] bool steal(task_wrapper& tw, const std::size_t idx, rng_t* rng)
-		{
-#ifdef PRINT_ETOR
-			printf("\n@worker %llu try to steal: ", idx);
-#endif
-			// Try stealing randomly 
-			size_t victim_idx = random_idx(rng) % workers_.size();
-			while (workers_.size() > 1 
-				&& (victim_idx == idx)) {
-				victim_idx = random_idx(rng) % workers_.size();
-			}
-			if (workers_[victim_idx].try_steal(tw)) {
-#ifdef PRINT_ETOR
-				printf("task stolen at first try from @worker %llu\n", victim_idx);
-#endif
-#ifdef COUNT_STEALING
-				steal_count_.fetch_add(1, std::memory_order_acq_rel);
-#endif
-				return true;
-			}
+		{		
+			for (size_t i = idx + 1; i < idx + workers_.size(); ++i) {
+				if (workers_[i % workers_.size()].try_steal(tw)) {
 
-			// If failed to find a victim after pre-def attempts, 
-			// decay to traversal
-			for (auto& worker : workers_) {
-				if (worker.try_steal(tw)) {
-#ifdef PRINT_ETOR
-					printf("task stolen from @worker %llu\n", victim_idx);
-#endif
 #ifdef COUNT_STEALING
-				steal_count_.fetch_add(1, std::memory_order_acq_rel);
+				steal_count_.fetch_add(1, std::memory_order_relaxed);
 #endif
 					return true;
 				}
@@ -501,22 +429,10 @@ namespace hungbiu
 			}
 		}
 		~hb_executor()
-		{
-#ifdef PRINT_ETOR
-			printf("\n@~executor call done(): ");
-#endif
-			while (!done()) {
-#ifdef PRINT_ETOR
-				printf("%s\n", is_done() ? "yes" : "no");
-#endif
-			}			
+		{		
 			for (auto& t : threads_) {
 				t.request_stop();
-			}
-			
-#ifdef PRINT_ETOR
-			printf("\n@hb_executor: end\n");
-#endif
+			}			
 		}
 
 		hb_executor(const hb_executor&) = delete;
