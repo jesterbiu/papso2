@@ -286,6 +286,7 @@ namespace hungbiu
 			void operator()(std::stop_token stoken)
 			{
 				auto h = get_handle();
+				const bool enable_stealing = etor_->enable_stealing_;
 				while (!etor_->is_done() && !stoken.stop_requested()) {
 					// This task wrapper must be destroyed at the end of the loop
 					task_wrapper tw;
@@ -297,8 +298,7 @@ namespace hungbiu
 					}
 
 					// steal from others
-					static constexpr bool enable_stealing = true;
-					if constexpr (enable_stealing) {
+					if (enable_stealing) {
 						if (etor_->steal(tw, index_, &rng_)) {
 							tw.run(h);
 							continue;
@@ -401,6 +401,7 @@ namespace hungbiu
 			workers_[idx % sz].notify_work();
 			ticket_.compare_exchange_strong(idx, idx + 1, std::memory_order_acq_rel);
 		} 
+		const bool enable_stealing_;
 		[[nodiscard]] bool steal(task_wrapper& tw, const std::size_t idx, rng_t* rng)
 		{		
 			for (size_t i = idx + 1; i < idx + workers_.size(); ++i) {
@@ -416,7 +417,8 @@ namespace hungbiu
 		}		
 			
 	public:				
-		hb_executor(size_t parallelism)
+		hb_executor(size_t parallelism, bool enable_stelaing = true) :
+			enable_stealing_(enable_stelaing)
 		{
 			workers_.reserve(parallelism);
 			threads_.reserve(parallelism);
@@ -427,6 +429,7 @@ namespace hungbiu
 		}
 		~hb_executor()
 		{		
+			done();
 			for (auto& t : threads_) {
 				t.request_stop();
 			}			

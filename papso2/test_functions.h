@@ -34,22 +34,16 @@ struct test_functions {
 
 	// f2 
 	static double schwefel_12(iter beg, iter end) {
-		double sum = 0;
-		iter next = beg + 1;
+		double squares_sum = 0;
+		double partial_sum = 0;
 
-		// next : [beg, end)
-		while (next != end) {
-			iter it = beg;
-
-			// first : [beg, next)
-			while (it != next) {
-				sum += std::pow(*it, 2);
-				it++;
-			}
-
-			next++;
+		// next : [beg + 1, end)
+		while (beg != end) {
+			partial_sum += *beg;			
+			squares_sum += std::pow(partial_sum, 2);
+			++beg;
 		}
-		return sum;
+		return squares_sum;
 	}
 
 	// f3

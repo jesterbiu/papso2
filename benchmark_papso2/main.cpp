@@ -3,15 +3,44 @@
 #include "../papso2/executor.h"
 #include "../papso2/papso2_test.h"
 
-static constexpr auto schwefel_12 = test_functions::functions[1];
+
 template <size_t Scale> requires (Scale > 0)
-double scaled_schwefel_12(iter beg, iter end) {
-	double result = 0;
-	for (int i = 0; i < Scale; ++i) {
-		benchmark::DoNotOptimize( result = schwefel_12(beg, end) );
+struct scaled_rosenbrock {
+	static double function(iter beg, iter end) {
+		static constexpr auto rosenbrock = test_functions::functions[2];
+		volatile double result = 0;
+		for (int i = 0; i < Scale; ++i) {
+			//benchmark::DoNotOptimize(  );
+			result = rosenbrock(beg, end);
+		}
+		return result;
 	}
-	return result;
+
+	static constexpr optimization_problem_t problem{
+		&function
+		, test_functions::bounds[2]
+		, test_functions::dimensions[2]
+	};
+};
+
+template <size_t Scale>
+static void benchmark_scaled_rosenbrock(benchmark::State& state) {
+	const optimization_problem_t& problem = scaled_rosenbrock<Scale>::problem;
+	const auto min = problem.feasible_bound.first;
+	const auto max = problem.feasible_bound.second;
+	const auto diff = max - min;
+
+	canonical_rng rng;
+	std::vector<double> vec(problem.dimension);
+	std::generate(vec.begin(), vec.end(), [&]() {
+		return min + rng() * diff;	});
+
+	for (auto _ : state) {
+		benchmark::DoNotOptimize(problem.function(vec.cbegin(), vec.cend()));
+	}
 }
+//BENCHMARK_TEMPLATE(benchmark_scaled_rosenbrock, 300)->Unit(benchmark::kMillisecond);
+//BENCHMARK_TEMPLATE(benchmark_scaled_rosenbrock, 550)->Unit(benchmark::kMillisecond);
 
 static void benchmark_executor_create(benchmark::State& state) {
 	const auto count = state.range(0);
@@ -34,7 +63,7 @@ static void benchmark_papso(benchmark::State& state) {
 	hungbiu::hb_executor etor{ static_cast<size_t>(state.range(2)) };
 
 	const optimization_problem_t problem{
-			&scaled_schwefel_12<8>
+			&scaled_rosenbrock<8>::function
 			, test_functions::bounds[1]
 			, test_functions::dimensions[1]
 	};
@@ -127,30 +156,27 @@ void benchmark_stealing_efficiency(benchmark::State& state) {
 //->Args({ 7, 100, 30 })
 //->Args({ 8, 100, 30 });
 
-// Args: [thread_count] [fork_count] [itr_per_task]
+// Args: [thread_count] [fork_count] [itr_per_task] [stealing]
 static void benchmark_stealing(benchmark::State& state) {	
 	const auto thread_count = state.range(0);
 	const auto fork_count = state.range(1);
 	const auto itr_per_task = state.range(2);
 	const auto func_index = 1;
 	// Bench
-	optimization_problem_t problem{
-		test_functions::functions[func_index],
-		test_functions::bounds[func_index],
-		test_functions::dimensions[func_index]
-	};
-	hungbiu::hb_executor etor(thread_count);
+	optimization_problem_t problem = scaled_rosenbrock<50>::problem;
+	hungbiu::hb_executor etor(thread_count, state.range(3));
+	using papso_t = basic_papso<hungbiu::spmc_buffer<vec_t>, 2, 70, 3000>;
 	for (auto _ : state) {
-		auto result = papso::parallel_async_pso(etor, 8, itr_per_task, problem);
+		auto result = papso_t::parallel_async_pso(etor, fork_count, itr_per_task, problem);
 		benchmark::DoNotOptimize(result.get());
 	}
 }
 
-//BENCHMARK(benchmark_stealing)
-//->Unit(benchmark::kMillisecond)
-//->Args({ 4, 4, 500 })
-//->Args({ 5, 5, 500 })
-//->Repetitions(10);
+BENCHMARK(benchmark_stealing)
+->Unit(benchmark::kMillisecond)
+->Args({ 3, 7, 500, 1 }) // stealing
+->Args({ 3, 7, 500, 0 })
+->Repetitions(3);
 
 // Args: [fork_count]
 template <int sz> requires (sz > 0)
@@ -181,44 +207,44 @@ void benchmark_particle_communication(benchmark::State& state) {
 }
 
 // Neighbor hood size
-BENCHMARK_TEMPLATE(benchmark_particle_communication, 2u) // lbest
-->Unit(benchmark::kMillisecond)->Iterations(1)->Repetitions(10)
-->Args({ 16, 500, 30 })
-->Args({ 16, 500, 50 })
-->Args({ 16, 500, 70 })
-->Args({ 16, 500, 100 });
-BENCHMARK_TEMPLATE(benchmark_particle_communication, 8u)
-->Unit(benchmark::kMillisecond)->Iterations(1)->Repetitions(10)
-->Args({ 16, 500, 30 })
-->Args({ 16, 500, 50 })
-->Args({ 16, 500, 70 })
-->Args({ 16, 500, 100 });
-BENCHMARK_TEMPLATE(benchmark_particle_communication, 16u)
-->Unit(benchmark::kMillisecond)->Iterations(1)->Repetitions(10)
-->Args({ 16, 500, 30 })
-->Args({ 16, 500, 50 })
-->Args({ 16, 500, 70 })
-->Args({ 16, 500, 100 });
-BENCHMARK_TEMPLATE(benchmark_particle_communication, 24u)
-->Unit(benchmark::kMillisecond)->Iterations(1)->Repetitions(10)
-->Args({ 16, 500, 30 })
-->Args({ 16, 500, 50 })
-->Args({ 16, 500, 70 })
-->Args({ 16, 500, 100 });
-
-BENCHMARK_TEMPLATE(benchmark_particle_communication, 32u)
-->Unit(benchmark::kMillisecond)->Iterations(1)->Repetitions(10)
-->Args({ 16, 500, 30 })
-->Args({ 16, 500, 50 })
-->Args({ 16, 500, 70 })
-->Args({ 16, 500, 100 });
-
-BENCHMARK_TEMPLATE(benchmark_particle_communication, 40u) // gbest
-->Unit(benchmark::kMillisecond)->Iterations(1)->Repetitions(10)
-->Args({ 16, 500, 30 })
-->Args({ 16, 500, 50 })
-->Args({ 16, 500, 70 })
-->Args({ 16, 500, 100 });
+//BENCHMARK_TEMPLATE(benchmark_particle_communication, 2u) // lbest
+//->Unit(benchmark::kMillisecond)->Iterations(1)->Repetitions(10)
+//->Args({ 16, 500, 30 })
+//->Args({ 16, 500, 50 })
+//->Args({ 16, 500, 70 })
+//->Args({ 16, 500, 100 });
+//BENCHMARK_TEMPLATE(benchmark_particle_communication, 8u)
+//->Unit(benchmark::kMillisecond)->Iterations(1)->Repetitions(10)
+//->Args({ 16, 500, 30 })
+//->Args({ 16, 500, 50 })
+//->Args({ 16, 500, 70 })
+//->Args({ 16, 500, 100 });
+//BENCHMARK_TEMPLATE(benchmark_particle_communication, 16u)
+//->Unit(benchmark::kMillisecond)->Iterations(1)->Repetitions(10)
+//->Args({ 16, 500, 30 })
+//->Args({ 16, 500, 50 })
+//->Args({ 16, 500, 70 })
+//->Args({ 16, 500, 100 });
+//BENCHMARK_TEMPLATE(benchmark_particle_communication, 24u)
+//->Unit(benchmark::kMillisecond)->Iterations(1)->Repetitions(10)
+//->Args({ 16, 500, 30 })
+//->Args({ 16, 500, 50 })
+//->Args({ 16, 500, 70 })
+//->Args({ 16, 500, 100 });
+//
+//BENCHMARK_TEMPLATE(benchmark_particle_communication, 32u)
+//->Unit(benchmark::kMillisecond)->Iterations(1)->Repetitions(10)
+//->Args({ 16, 500, 30 })
+//->Args({ 16, 500, 50 })
+//->Args({ 16, 500, 70 })
+//->Args({ 16, 500, 100 });
+//
+//BENCHMARK_TEMPLATE(benchmark_particle_communication, 40u) // gbest
+//->Unit(benchmark::kMillisecond)->Iterations(1)->Repetitions(10)
+//->Args({ 16, 500, 30 })
+//->Args({ 16, 500, 50 })
+//->Args({ 16, 500, 70 })
+//->Args({ 16, 500, 100 });
 
 // Communication cost - Forks
 //BENCHMARK_TEMPLATE(benchmark_particle_communication, naive_buffer, 40u, 1)
