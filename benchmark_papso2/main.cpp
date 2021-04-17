@@ -39,7 +39,7 @@ static void benchmark_scaled_rosenbrock(benchmark::State& state) {
 		benchmark::DoNotOptimize(problem.function(vec.cbegin(), vec.cend()));
 	}
 }
-//BENCHMARK_TEMPLATE(benchmark_scaled_rosenbrock, 300)->Unit(benchmark::kMillisecond);
+//BENCHMARK_TEMPLATE(benchmark_scaled_rosenbrock, 1);
 //BENCHMARK_TEMPLATE(benchmark_scaled_rosenbrock, 550)->Unit(benchmark::kMillisecond);
 
 static void benchmark_executor_create(benchmark::State& state) {
@@ -54,19 +54,17 @@ static void benchmark_executor_create(benchmark::State& state) {
 
 
 // Bench speed of optimizing test functions suite
-// Args: [fork_count] [iter_per_task] [thread_count]
+// Args: [fork_count] [iter_per_task] [thread_count] [enable_stealing]
 static void benchmark_papso(benchmark::State& state) {
 	using papso_t = basic_papso<hungbiu::spmc_buffer<vec_t>, 2, 48, 5000>;
 
 	size_t fork_count = state.range(0);
 	size_t iter_per_task = state.range(1);
-	hungbiu::hb_executor etor{ static_cast<size_t>(state.range(2)) };
+	hungbiu::hb_executor etor{ 
+		static_cast<size_t>(state.range(2))
+		, static_cast<bool>(state.range(3)) };
 
-	const optimization_problem_t problem{
-			&scaled_rosenbrock<8>::function
-			, test_functions::bounds[1]
-			, test_functions::dimensions[1]
-	};
+	const optimization_problem_t problem = scaled_rosenbrock<50>::problem;
 
     for (auto _ : state) {
 		auto result = papso_t::parallel_async_pso(etor, fork_count, iter_per_task, problem);
@@ -87,12 +85,17 @@ static void benchmark_papso(benchmark::State& state) {
 //->Iterations(1)
 //->Repetitions(5)
 //->Unit(benchmark::kMillisecond)
-//->Args({ 8, 500, 8 })
-//->Args({ 8, 200, 8 })
-//->Args({ 8, 100, 8 })
-//->Args({ 12, 100, 8 })
-//->Args({ 16, 100, 8 })
-//->Args({ 24, 100, 8 });
+//->Args({ 1, 5000, 1, 0 }) // base line
+//->Args({ 2, 500, 2, 0 }) // NO_WS
+//->Args({ 3, 500, 3, 0 })
+//->Args({ 4, 500, 4, 0 })
+//->Args({ 6, 500, 6, 0 })
+//->Args({ 8, 500, 8, 0 })
+//->Args({ 2, 500, 2, 1 }) // WS
+//->Args({ 3, 500, 3, 1 })
+//->Args({ 4, 500, 4, 1 })
+//->Args({ 6, 500, 6, 1 })
+//->Args({ 8, 500, 8, 1 });
 
 // Args: [function idx] [dimensions] [iterations]
 static void benchmark_test_functions(benchmark::State& state) {
@@ -157,7 +160,10 @@ void benchmark_stealing_efficiency(benchmark::State& state) {
 //->Args({ 8, 100, 30 });
 
 // Args: [thread_count] [fork_count] [itr_per_task] [stealing]
+template <size_t NbSize>
 static void benchmark_stealing(benchmark::State& state) {	
+	using papso_t = basic_papso<hungbiu::spmc_buffer<vec_t>, 2, NbSize, 5000>;
+
 	const auto thread_count = state.range(0);
 	const auto fork_count = state.range(1);
 	const auto itr_per_task = state.range(2);
@@ -165,18 +171,51 @@ static void benchmark_stealing(benchmark::State& state) {
 	// Bench
 	optimization_problem_t problem = scaled_rosenbrock<50>::problem;
 	hungbiu::hb_executor etor(thread_count, state.range(3));
-	using papso_t = basic_papso<hungbiu::spmc_buffer<vec_t>, 2, 70, 3000>;
 	for (auto _ : state) {
 		auto result = papso_t::parallel_async_pso(etor, fork_count, itr_per_task, problem);
 		benchmark::DoNotOptimize(result.get());
 	}
 }
 
-BENCHMARK(benchmark_stealing)
+//BENCHMARK_TEMPLATE(benchmark_stealing, 50)
+//->Unit(benchmark::kMillisecond)
+//->Repetitions(10)
+//->Args({ 3, 5, 250, 1 }) // WS
+//->Args({ 3, 5, 250, 0 }); // NO_WS
+
+
+//BENCHMARK_TEMPLATE(benchmark_stealing, 75)
+//->Unit(benchmark::kMillisecond)
+//->Repetitions(1)
+//// WS
+//->Args({ 4, 15, 250, 1 })
+//// NO_WS
+//->Args({ 4, 15, 250, 0 });
+
+
+BENCHMARK_TEMPLATE(benchmark_stealing, 50)
 ->Unit(benchmark::kMillisecond)
-->Args({ 3, 7, 500, 1 }) // stealing
-->Args({ 3, 7, 500, 0 })
-->Repetitions(3);
+->Repetitions(5)
+// WS
+->Args({ 7, 10, 500, 1 })
+// NO_WS
+->Args({ 7, 10, 500, 0 });
+
+BENCHMARK_TEMPLATE(benchmark_stealing, 80)
+->Unit(benchmark::kMillisecond)
+->Repetitions(5)
+// WS
+->Args({ 7, 16, 500, 1 })
+// NO_WS
+->Args({ 7, 16, 500, 0 });
+
+BENCHMARK_TEMPLATE(benchmark_stealing, 100)
+->Unit(benchmark::kMillisecond)
+->Repetitions(5)
+// WS
+->Args({ 7, 20, 500, 1 }) 
+// NO_WS
+->Args({ 7, 20, 500, 0 });
 
 // Args: [fork_count]
 template <int sz> requires (sz > 0)
